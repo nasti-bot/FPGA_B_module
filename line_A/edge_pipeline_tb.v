@@ -4,15 +4,13 @@ module edge_pipeline_tb;
 
     reg clk;
     reg rst_n;
-    reg [7:0] R;
-    reg [7:0] G_in;     
-    reg [7:0] B;
-    wire edge_flag;
+    reg [15:0] rgb565_in;
+    wire [15:0] rgb565_out;
 
     edge_pipeline #(.IMG_W(16), .THRESHOLD(100)) uut (
         .clk(clk), .rst_n(rst_n),
-        .R(R), .G_in(G_in), .B(B),
-        .edge_flag(edge_flag)
+        .rgb565_in(rgb565_in),
+        .rgb565_out(rgb565_out)
     );
 
     initial begin
@@ -21,25 +19,22 @@ module edge_pipeline_tb;
     end
 
     integer k;
-    reg [7:0] img [0:255];
     initial begin
-        #25 rst_n = 1;
+        rst_n = 0;
         @(negedge clk);
-        for (k = 0; k < 256; k = k + 1) begin
-    // 每行16个，列号 = k % 16
-    // 列号 < 8 的是黑，>= 8 的是白
-    if ((k % 16) < 8)
-        img[k] = 0;    // 左边黑
-    else
-        img[k] = 255;  // 右边白
-            R = img[k]; G_in = img[k]; B = img[k];
-            #20;
+        rst_n = 1;
+        // 喂第一个像素（黑 = 16'h0000，白 = 16'hFFFF）
+        rgb565_in = ((0 % 16) < 8) ? 16'h0000 : 16'hFFFF;
+        for (k = 1; k < 256; k = k + 1) begin
+            @(negedge clk);
+            rgb565_in = ((k % 16) < 8) ? 16'h0000 : 16'hFFFF;   // 左黑右白
         end
-        #60 $finish;
+        #60;
+        $finish;
     end
 
     initial begin
-        $monitor("time=%0t | R=%0d G_in=%0d B=%0d edge_flag=%b", $time, R, G_in, B, edge_flag);
+        $monitor("time=%0t | in=%h out=%h", $time, rgb565_in, rgb565_out);
     end
 
 endmodule

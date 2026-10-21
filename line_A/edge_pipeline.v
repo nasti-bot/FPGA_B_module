@@ -1,9 +1,9 @@
 // ============================================
 // 模块：edge_pipeline（线A：找边缘）
-// 功能：完整边缘检测流水线
-//   流程：灰度化 → 3x3窗口 → 中值滤波 → 3x3窗口 → Sobel → 阈值
-// 输入：clk、rst_n、R/G_in/B（各8位彩色像素）
-// 输出：edge_flag（1=边缘，0=非边缘）
+// 功能：完整边缘检测流水线，红色边缘输出
+//   流程：565拆解 → 灰度化 → 3x3窗口 → 中值滤波 → 3x3窗口 → Sobel → 阈值
+// 输入：clk、rst_n、rgb565_in（16位RGB565）
+// 输出：rgb565_out（16位，边缘=红色F800，非边缘=原图）
 // 说明：两个 window3x3 分别给中值滤波和 Sobel 凑 3x3 窗口
 // ============================================
 module edge_pipeline #(
@@ -12,14 +12,21 @@ module edge_pipeline #(
 )(
     input  wire clk,
     input  wire rst_n,
-    input  wire [7:0] R,
-    input  wire [7:0] G_in,     // 注意：G 已被 Sobel 的 G 占用，绿色通道改叫 G_in
-    input  wire [7:0] B,
-    output wire edge_flag
+    input  wire [15:0] rgb565_in,   // 摄像头来的 16 位 RGB565
+    output wire [15:0] rgb565_out
 );
 
     wire [7:0] gray;
-    rgb2gray u_gray (.R(R), .G(G_in), .B(B), .Y(gray));
+    // 拆 565
+    wire [4:0] r5 = rgb565_in[15:11];
+    wire [5:0] g6 = rgb565_in[10:5];
+    wire [4:0] b5 = rgb565_in[4:0];
+
+    // 补成 8 位（左移补零）
+    wire [7:0] R8 = {r5, 3'b000};   // 5位 → 8位，左移3位
+    wire [7:0] G8 = {g6, 2'b00};    // 6位 → 8位，左移2位
+    wire [7:0] B8 = {b5, 3'b000};
+    rgb2gray u_gray (.R(R8), .G(G8), .B(B8), .Y(gray));
 
     // 第一个窗口：给中值滤波凑 3x3
     wire [7:0] m00,m01,m02,m10,m11,m12,m20,m21,m22;
@@ -55,6 +62,28 @@ module edge_pipeline #(
         .G(grad)
     );
 
+    // 阈值判断：产生 edge_flag（内部信号）
+    wire edge_flag;
     assign edge_flag = (grad > THRESHOLD) ? 1'b1 : 1'b0;
+
+    // 原图延迟链：让原图和 edge_flag 对齐
+    // DELAY 是拍数
+parameter DELAY = 34; 
+
+reg [15:0] delay_line [0:63];
+integer di;
+
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        for (di = 0; di < 64; di = di + 1)
+            delay_line[di] <= 0;
+    end else begin
+        delay_line[0] <= rgb565_in;
+        for (di = 1; di < 64; di = di + 1)
+            delay_line[di] <= delay_line[di-1];
+    end
+end
+
+assign rgb565_out = edge_flag ? 16'hF800 : delay_line[DELAY];
 
 endmodule
