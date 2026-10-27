@@ -2,13 +2,18 @@
 
 module shape_pipeline_tb;
 
-    reg clk, rst_n, px_valid;
-    reg [7:0] R, G, B;
+    reg clk, rst_n;
+    reg [15:0] rgb565_in;
+    reg din_valid, din_hsync, din_vsync;
     wire [1:0] shape_out;
+    wire dout_valid, dout_hsync, dout_vsync;
 
     shape_pipeline #(.IMG_W(16), .IMG_H(16)) uut (
-        .clk(clk), .rst_n(rst_n), .px_valid(px_valid),
-        .R(R), .G(G), .B(B), .shape_out(shape_out)
+        .clk(clk), .rst_n(rst_n),
+        .rgb565_in(rgb565_in),
+        .din_valid(din_valid), .din_hsync(din_hsync), .din_vsync(din_vsync),
+        .shape_out(shape_out),
+        .dout_valid(dout_valid), .dout_hsync(dout_hsync), .dout_vsync(dout_vsync)
     );
 
     initial begin
@@ -16,34 +21,33 @@ module shape_pipeline_tb;
         forever #10 clk = ~clk;
     end
 
-    // 16x16 image: dark 8x8 square in the middle, white background
-    // square: rows 4..11, cols 4..11
     integer k;
     initial begin
         rst_n = 0;
-        px_valid = 0;
+        din_valid = 0;
+        din_hsync = 0;
+        din_vsync = 0;
         @(negedge clk);
         rst_n = 1;
-        px_valid = 1;
-        // feed pixel 0 right away (same beat as reset release)
-        if ((0/16 >= 4) && (0/16 <= 11) && (0%16 >= 4) && (0%16 <= 11)) begin
-            R=0; G=0; B=0;
-        end else begin
-            R=255; G=255; B=255;
-        end
+        din_valid = 1;
+        din_hsync = 1;
+        // 喂一帧 16x16 图：中间 8x8 黑方块（黑=0000），其余白（ffff）
+        rgb565_in = ((0/16>=4)&&(0/16<=11)&&(0%16>=4)&&(0%16<=11)) ? 16'h0000 : 16'hFFFF;
         for (k = 1; k < 256; k = k + 1) begin
             @(negedge clk);
-            if ((k/16 >= 4) && (k/16 <= 11) && (k%16 >= 4) && (k%16 <= 11)) begin
-                R=0; G=0; B=0;      // dark square
-            end else begin
-                R=255; G=255; B=255; // white background
-            end
+            rgb565_in = ((k/16>=4)&&(k/16<=11)&&(k%16>=4)&&(k%16<=11)) ? 16'h0000 : 16'hFFFF;
         end
+        // 一帧喂完，拉高 vsync（帧结束脉冲）
         @(negedge clk);
-        px_valid = 0;
-        #60;   // wait a few cycles for area/bbox to settle
-        $display("FINAL shape = %b (00=none 01=circle 10=rect)", shape_out);
+        din_vsync = 1;
+        @(negedge clk);
+        din_vsync = 0;
+        #60;
         $finish;
+    end
+
+    initial begin
+        $monitor("time=%0t | shape=%b dv=%b dvs=%b", $time, shape_out, dout_valid, dout_vsync);
     end
 
 endmodule
