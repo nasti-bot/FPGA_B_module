@@ -13,22 +13,32 @@ module line_buffer #(
     input  wire clk,
     input  wire rst_n,
     input  wire [DW-1:0] din,
-    output reg  [DW-1:0] dout
+    input  wire din_valid,          // 输入 valid
+    output reg  [DW-1:0] dout,
+    output reg  dout_valid          // 输出 valid
 );
 
     reg [DW-1:0] mem [0:WIDTH-1];   // WIDTH 个寄存器
+    reg valid_mem [0:WIDTH-1];      // valid 的移位链
     integer i;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            for (i = 0; i < WIDTH; i = i + 1)
+            for (i = 0; i < WIDTH; i = i + 1) begin
                 mem[i] <= 0;
+                valid_mem[i] <= 0; 
+            end
             dout <= 0;
+            dout_valid <= 0; 
         end else begin
             dout <= mem[WIDTH-1];          // 最老的那个被挤出去
-            for (i = WIDTH-1; i > 0; i = i - 1)
+            dout_valid <= valid_mem[WIDTH-1];   
+            for (i = WIDTH-1; i > 0; i = i - 1) begin
                 mem[i] <= mem[i-1];        // 全体往右挪一格
+                valid_mem[i] <= valid_mem[i-1]; 
+            end
             mem[0] <= din;                 // 新的从最左边进来
+            valid_mem[0] <= din_valid;     
         end
     end
 
