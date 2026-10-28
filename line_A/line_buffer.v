@@ -1,10 +1,9 @@
 // ============================================
 // 模块：line_buffer
 // 功能：行缓存 —— 把一行像素存起来，延迟「一行宽度」拍输出
-// 输入：din（像素流，每拍一个，位宽 DW）
-// 输出：dout = 输入延迟 WIDTH 拍后的值，即「上一行同一列」的像素
-// 说明：本质是移位寄存器(FIFO)；两个行缓存串联就能凑出三行，
-//       是 3x3 窗口（Sobel/中值滤波）的基础
+// 输入：din（像素）、din_valid/hsync/vsync（伴生信号）
+// 输出：dout（延迟后的像素）、dout_valid/hsync/vsync（同步延迟的伴生信号）
+// 说明：valid/hsync/vsync 与数据同步移位，保证绝对对齐
 // ============================================
 module line_buffer #(
     parameter WIDTH = 4,   // 一行像素个数
@@ -13,32 +12,51 @@ module line_buffer #(
     input  wire clk,
     input  wire rst_n,
     input  wire [DW-1:0] din,
-    input  wire din_valid,          // 输入 valid
+    input  wire din_valid,
+    input  wire din_hsync,
+    input  wire din_vsync,
     output reg  [DW-1:0] dout,
-    output reg  dout_valid          // 输出 valid
+    output reg  dout_valid,
+    output reg  dout_hsync,
+    output reg  dout_vsync
 );
 
-    reg [DW-1:0] mem [0:WIDTH-1];   // WIDTH 个寄存器
-    reg valid_mem [0:WIDTH-1];      // valid 的移位链
+    reg [DW-1:0] mem [0:WIDTH-1];      // 数据移位链
+    reg valid_mem [0:WIDTH-1];         // valid 移位链
+    reg hsync_mem [0:WIDTH-1];         // hsync 移位链
+    reg vsync_mem [0:WIDTH-1];         // vsync 移位链
     integer i;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             for (i = 0; i < WIDTH; i = i + 1) begin
-                mem[i] <= 0;
-                valid_mem[i] <= 0; 
+                mem[i]       <= 0;
+                valid_mem[i] <= 0;
+                hsync_mem[i] <= 0;
+                vsync_mem[i] <= 0;
             end
-            dout <= 0;
-            dout_valid <= 0; 
+            dout       <= 0;
+            dout_valid <= 0;
+            dout_hsync <= 0;
+            dout_vsync <= 0;
         end else begin
-            dout <= mem[WIDTH-1];          // 最老的那个被挤出去
-            dout_valid <= valid_mem[WIDTH-1];   
+            // 最老的被挤出去
+            dout       <= mem[WIDTH-1];
+            dout_valid <= valid_mem[WIDTH-1];
+            dout_hsync <= hsync_mem[WIDTH-1];
+            dout_vsync <= vsync_mem[WIDTH-1];
+            // 全体往右挪一格
             for (i = WIDTH-1; i > 0; i = i - 1) begin
-                mem[i] <= mem[i-1];        // 全体往右挪一格
-                valid_mem[i] <= valid_mem[i-1]; 
+                mem[i]       <= mem[i-1];
+                valid_mem[i] <= valid_mem[i-1];
+                hsync_mem[i] <= hsync_mem[i-1];
+                vsync_mem[i] <= vsync_mem[i-1];
             end
-            mem[0] <= din;                 // 新的从最左边进来
-            valid_mem[0] <= din_valid;     
+            // 新的从最左边进来
+            mem[0]       <= din;
+            valid_mem[0] <= din_valid;
+            hsync_mem[0] <= din_hsync;
+            vsync_mem[0] <= din_vsync;
         end
     end
 
