@@ -6,7 +6,7 @@
 // 说明：原图和灰度、伴生信号一起穿过行缓存和移位寄存器，保证绝对同步
 // ============================================
 module window3x3 #(
-    parameter WIDTH = 4    // 一行像素个数
+    parameter LINE_W = 4    // 一行总周期(含消隐)=H_Total_Time，不是图像有效宽！
 )(
     input  wire clk,
     input  wire rst_n,
@@ -40,14 +40,14 @@ module window3x3 #(
     assign r0_h  = din_hsync;
     assign r0_vs = din_vsync;
 
-    line_buffer #(.WIDTH(WIDTH)) lb1 (
+    line_buffer #(.WIDTH(LINE_W)) lb1 (
         .clk(clk), .rst_n(rst_n),
         .din(din), .din_rgb(din_rgb),
         .din_valid(din_valid), .din_hsync(din_hsync), .din_vsync(din_vsync),
         .dout(r1), .dout_rgb(r1_rgb),
         .dout_valid(r1_v), .dout_hsync(r1_h), .dout_vsync(r1_vs)
     );
-    line_buffer #(.WIDTH(WIDTH)) lb2 (
+    line_buffer #(.WIDTH(LINE_W)) lb2 (
         .clk(clk), .rst_n(rst_n),
         .din(r1), .din_rgb(r1_rgb),
         .din_valid(r1_v), .din_hsync(r1_h), .din_vsync(r1_vs),

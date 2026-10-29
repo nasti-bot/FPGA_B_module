@@ -28,7 +28,7 @@ module key_ctrl #(
     // 档位寄存器：加档/减档，1~5 循环
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            level <= 3'd2;    // 默认档位2（=系数2，即"均值×2"）
+            level <= 3'd3;    // 默认档位3（=系数3，即"均值×3"）；4向Sobel后此档雪花为0
         end else if (key0_pressed) begin
             // 加档：灵敏度降低，阈值升高
             level <= (level >= 3'd5) ? 3'd1 : level + 1'b1;

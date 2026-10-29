@@ -7,8 +7,10 @@
 // 说明：原图和灰度一起穿过两个 window3x3 的行缓存，延迟自动对齐，无需 DELAY 参数
 // ============================================
 module edge_pipeline #(
-    parameter IMG_W = 4,        // 一行宽
-    parameter IMG_H = 96       // 一帧行数
+    parameter IMG_W = 4,        // 图像一行有效像素数（800x480 时=800）
+    parameter IMG_H = 96,       // 图像行数（800x480 时=480）
+    parameter LINE_W = 4        // 一行总周期含消隐 = H_Total_Time（800x480 时=1056）
+                                // 必须传这个！行缓存要延迟「一整行」，不是有效宽
 )(
     input  wire clk,
     input  wire rst_n,
@@ -40,7 +42,7 @@ module edge_pipeline #(
     wire [7:0] m00,m01,m02,m10,m11,m12,m20,m21,m22;
     wire [15:0] rgb_mid;   // 第一个窗口输出的对齐原图
     wire valid_mid, hsync_mid, vsync_mid;
-    window3x3 #(.WIDTH(IMG_W)) u_win1 (
+    window3x3 #(.LINE_W(LINE_W)) u_win1 (
         .clk(clk), .rst_n(rst_n), .din(gray), .din_rgb(rgb565_in),
         .din_valid(din_valid), .din_hsync(din_hsync), .din_vsync(din_vsync),
         .dout_rgb(rgb_mid),
@@ -61,7 +63,7 @@ module edge_pipeline #(
     // 第二个窗口：给 Sobel 凑 3x3（原图、伴生信号继续穿过）
     wire [7:0] s00,s01,s02,s10,s11,s12,s20,s21,s22;
     wire [15:0] rgb_aligned;   // 最终对齐的原图
-    window3x3 #(.WIDTH(IMG_W)) u_win2 (
+    window3x3 #(.LINE_W(LINE_W)) u_win2 (
         .clk(clk), .rst_n(rst_n), .din(med), .din_rgb(rgb_mid),
         .din_valid(valid_mid), .din_hsync(hsync_mid), .din_vsync(vsync_mid),
         .dout_rgb(rgb_aligned),

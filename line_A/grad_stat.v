@@ -34,8 +34,8 @@ module grad_stat #(
         end else begin
             vsync_d <= din_vsync;
 
-            if (din_vsync && !vsync_d) begin
-                // 帧结束：锁存上一帧结果，清零，开始新帧
+            if (!din_vsync && vsync_d) begin
+                // vsync 下降沿=帧结束：锁存上一帧结果，清零，开始新帧
                 sum_out <= sum;
                 cnt_out <= cnt;
                 frame_done <= 1'b1;
