@@ -62,26 +62,28 @@ module edge_pipeline #(
 
     // 第二个窗口：给 Sobel 凑 3x3（原图、伴生信号继续穿过）
     wire [7:0] s00,s01,s02,s10,s11,s12,s20,s21,s22;
-    wire [15:0] rgb_aligned;   // 最终对齐的原图
+    wire [15:0] rgb_aligned;   // 第二个窗口输出的对齐原图
+    wire valid_win2, hsync_win2, vsync_win2;
     window3x3 #(.LINE_W(LINE_W)) u_win2 (
         .clk(clk), .rst_n(rst_n), .din(med), .din_rgb(rgb_mid),
         .din_valid(valid_mid), .din_hsync(hsync_mid), .din_vsync(vsync_mid),
         .dout_rgb(rgb_aligned),
-        .dout_valid(dout_valid), .dout_hsync(dout_hsync), .dout_vsync(dout_vsync),
+        .dout_valid(valid_win2), .dout_hsync(hsync_win2), .dout_vsync(vsync_win2),
         .w00(s00), .w01(s01), .w02(s02),
         .w10(s10), .w11(s11), .w12(s12),
         .w20(s20), .w21(s21), .w22(s22)
     );
 
     wire [10:0] grad;
+    wire signed [10:0] gx_s, gy_s;
     sobel_core u_sobel (
         .P0(s00), .P1(s01), .P2(s02),
         .P3(s10), .P4(s11), .P5(s12),
         .P6(s20), .P7(s21), .P8(s22),
-        .G(grad)
+        .G(grad), .gx_s(gx_s), .gy_s(gy_s)
     );
 
-    // ===== 自适应阈值（方案B：均值×2）=====
+    // ===== 自适应阈值统计（用 NMS 前的 grad，均值不被 NMS 的 0 拉低）=====
     wire [31:0] grad_sum;
     wire [19:0] grad_cnt;
     wire frame_done;
@@ -89,11 +91,24 @@ module edge_pipeline #(
     grad_stat u_stat (
         .clk(clk), .rst_n(rst_n),
         .grad(grad),
-        .din_valid(dout_valid),
-        .din_vsync(dout_vsync),
+        .din_valid(valid_win2),
+        .din_vsync(vsync_win2),
         .sum_out(grad_sum),
         .cnt_out(grad_cnt),
         .frame_done(frame_done)
+    );
+
+    // ===== NMS 非极大值抑制：把边缘细化到 1 像素 =====
+    wire [10:0] nms_grad;
+    wire [15:0] rgb_nms;
+    wire valid_nms, hsync_nms, vsync_nms;
+    nms_core #(.LINE_W(LINE_W)) u_nms (
+        .clk(clk), .rst_n(rst_n),
+        .grad(grad), .gx_s(gx_s), .gy_s(gy_s),
+        .din_rgb(rgb_aligned),
+        .din_valid(valid_win2), .din_hsync(hsync_win2), .din_vsync(vsync_win2),
+        .nms_grad(nms_grad), .dout_rgb(rgb_nms),
+        .dout_valid(valid_nms), .dout_hsync(hsync_nms), .dout_vsync(vsync_nms)
     );
 
     // 按键调档：S0加档、S1减档，档位1~5
@@ -104,16 +119,34 @@ module edge_pipeline #(
         .level(level)
     );
 
+    // 阈值比较：用 NMS 后的梯度比 均值阈值
     wire edge_flag;
     adaptive_threshold u_th (
-        .grad(grad),
+        .grad(nms_grad),
         .sum(grad_sum),
         .cnt(grad_cnt),
         .level(level),
         .edge_flag(edge_flag)
     );
 
-    // 输出：边缘=红色，非边缘=对齐后的原图（无需 DELAY，自动对齐）
-    assign rgb565_out = edge_flag ? 16'hF800 : rgb_aligned;
+    // ===== 连通域过滤：去掉孤立噪点（雪花），保留连续边缘线 =====
+    wire edge_filtered;
+    wire [15:0] rgb_filtered;
+    wire valid_filtered, hsync_filtered, vsync_filtered;
+    edge_filter #(.LINE_W(LINE_W)) u_flt (
+        .clk(clk), .rst_n(rst_n),
+        .edge_flag(edge_flag),
+        .din_rgb(rgb_nms),
+        .din_valid(valid_nms), .din_hsync(hsync_nms), .din_vsync(vsync_nms),
+        .edge_filtered(edge_filtered),
+        .dout_rgb(rgb_filtered),
+        .dout_valid(valid_filtered), .dout_hsync(hsync_filtered), .dout_vsync(vsync_filtered)
+    );
+
+    // 输出：边缘=红色，非边缘=过滤对齐后的原图
+    assign rgb565_out = edge_filtered ? 16'hF800 : rgb_filtered;
+    assign dout_valid = valid_filtered;
+    assign dout_hsync = hsync_filtered;
+    assign dout_vsync = vsync_filtered;
 
 endmodule

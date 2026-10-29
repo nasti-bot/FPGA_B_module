@@ -14,7 +14,9 @@ module sobel_core(
     input  wire [7:0] P0, P1, P2, P3, P4, P5, P6, P7, P8,
     output wire [10:0] gx_mag,   // |G90|，垂直边缘（左右差分）
     output wire [10:0] gy_mag,   // |G0|，水平边缘（上下差分）
-    output wire [10:0] G         // 边缘强度 = max(G0,G45,G90,G135)，最大1020
+    output wire [10:0] G,        // 边缘强度 = max(G0,G45,G90,G135)，最大1020
+    output wire signed [10:0] gx_s,  // 有符号 Gx（右减左），NMS 判断梯度方向
+    output wire signed [10:0] gy_s   // 有符号 Gy（下减上），NMS 判断梯度方向
 );
 
     wire [10:0] G0_p,  G0_n,  G45_p, G45_n, G90_p, G90_n, G135_p, G135_n;
@@ -49,5 +51,9 @@ module sobel_core(
     // 保留两个正交方向供参考
     assign gx_mag = G90;
     assign gy_mag = G0;
+
+    // 有符号梯度（NMS 判断方向用）：右减左、下减上
+    assign gx_s = $signed({1'b0, G90_p}) - $signed({1'b0, G90_n});
+    assign gy_s = $signed({1'b0, G0_p})  - $signed({1'b0, G0_n});
 
 endmodule
