@@ -1,0 +1,25 @@
+{
+    "args": [
+        "-o",
+        "etx_ddr3_reset_controller",
+        "--base_path",
+        "ip",
+        "--vlnv",
+        {
+            "vendor": "efinixinc.com",
+            "library": "memory_controller",
+            "name": "efx_ddr_reset_controller",
+            "version": "5.2"
+        }
+    ],
+    "conf": {
+        "FREQ": "50"
+    },
+    "output": {
+        "external_source_source": [],
+        "external_testbench_testbench": []
+    },
+    "ooc_synthesis": {},
+    "sw_version": "2026.1.132",
+    "external_path_option": "RELATIVE_PATH"
+}

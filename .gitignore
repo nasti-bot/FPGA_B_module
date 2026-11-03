@@ -1,4 +1,6 @@
-sim.out
-*.zip
-wave.vcd
-*.wdb
+# 编译/综合生成文件
+outflow/
+work_*/
+*.vdb
+*.map
+*.rpt
